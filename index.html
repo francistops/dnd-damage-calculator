@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DnD Damage Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8">DnD Damage Calculator</h1>
+        
+        <!-- Monster Selector -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Select Monster</h2>
+            <select id="monster-select" class="w-full p-2 border border-gray-300 rounded-md">
+                <option value="">Loading monsters...</option>
+            </select>
+        </div>
+        
+        <!-- Monster Details -->
+        <div id="monster-details" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Monster Details</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <p><strong>Name:</strong> <span id="monster-name"></span></p>
+                    <p><strong>Armor Class:</strong> <span id="monster-ac"></span></p>
+                    <p><strong>Hit Points:</strong> <span id="monster-hp"></span></p>
+                    <p><strong>Challenge Rating:</strong> <span id="monster-cr"></span></p>
+                </div>
+                <div>
+                    <p><strong>Damage Resistances:</strong> <span id="monster-resistances"></span></p>
+                    <p><strong>Damage Immunities:</strong> <span id="monster-immunities"></span></p>
+                    <p><strong>Damage Vulnerabilities:</strong> <span id="monster-vulnerabilities"></span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Damage Calculator -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Damage Calculator</h2>
+            <form id="damage-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="damage-amount" class="block text-sm font-medium text-gray-700">Damage Amount</label>
+                        <input type="number" id="damage-amount" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., 12">
+                    </div>
+                    <div>
+                        <label for="damage-type" class="block text-sm font-medium text-gray-700">Damage Type</label>
+                        <select id="damage-type" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                            <option value="acid">Acid</option>
+                            <option value="bludgeoning">Bludgeoning</option>
+                            <option value="cold">Cold</option>
+                            <option value="fire">Fire</option>
+                            <option value="force">Force</option>
+                            <option value="lightning">Lightning</option>
+                            <option value="necrotic">Necrotic</option>
+                            <option value="piercing">Piercing</option>
+                            <option value="poison">Poison</option>
+                            <option value="psychic">Psychic</option>
+                            <option value="radiant">Radiant</option>
+                            <option value="slashing">Slashing</option>
+                            <option value="thunder">Thunder</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Calculate Damage
+                </button>
+            </form>
+        </div>
+        
+        <!-- Results -->
+        <div id="results" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Damage Results</h2>
+            <p><strong>Base Damage:</strong> <span id="base-damage"></span></p>
+            <p><strong>Damage Type:</strong> <span id="result-type"></span></p>
+            <p><strong>Modifier:</strong> <span id="modifier"></span></p>
+            <p><strong>Final Damage:</strong> <span id="final-damage"></span></p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://www.dnd5eapi.co/api/2014';
+        let currentMonster = null;
+
+        // Load monsters on page load
+        async function loadMonsters() {
+            try {
+                const response = await fetch(`${API_BASE}/monsters`);
+                const data = await response.json();
+                const select = document.getElementById('monster-select');
+                select.innerHTML = '<option value="">Select a monster...</option>';
+                
+                data.results.forEach(monster => {
+                    const option = document.createElement('option');
+                    option.value = monster.index;
+                    option.textContent = monster.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading monsters:', error);
+                document.getElementById('monster-select').innerHTML = '<option value="">Error loading monsters</option>';
+            }
+        }
+
+        // Load monster details
+        async function loadMonsterDetails(index) {
+            try {
+                const response = await fetch(`${API_BASE}/monsters/${index}`);
+                currentMonster = await response.json();
+                
+                document.getElementById('monster-name').textContent = currentMonster.name;
+                document.getElementById('monster-ac').textContent = currentMonster.armor_class[0]?.value || 'N/A';
+                document.getElementById('monster-hp').textContent = `${currentMonster.hit_points} (${currentMonster.hit_dice})`;
+                document.getElementById('monster-cr').textContent = currentMonster.challenge_rating;
+                document.getElementById('monster-resistances').textContent = currentMonster.damage_resistances?.join(', ') || 'None';
+                document.getElementById('monster-immunities').textContent = currentMonster.damage_immunities?.join(', ') || 'None';
+                document.getElementById('monster-vulnerabilities').textContent = currentMonster.damage_vulnerabilities?.join(', ') || 'None';
+                
+                document.getElementById('monster-details').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading monster details:', error);
+            }
+        }
+
+        // Calculate damage
+        function calculateDamage(amount, type) {
+            if (!currentMonster) return { base: amount, modifier: 'None', final: amount };
+            
+            let modifier = 'None';
+            let final = amount;
+            
+            if (currentMonster.damage_immunities?.includes(type)) {
+                modifier = 'Immune';
+                final = 0;
+            } else if (currentMonster.damage_vulnerabilities?.includes(type)) {
+                modifier = 'Vulnerable (x2)';
+                final = amount * 2;
+            } else if (currentMonster.damage_resistances?.includes(type)) {
+                modifier = 'Resistant (x0.5)';
+                final = Math.floor(amount / 2);
+            }
+            
+            return { base: amount, modifier, final };
+        }
+
+        // Event listeners
+        document.getElementById('monster-select').addEventListener('change', (e) => {
+            if (e.target.value) {
+                loadMonsterDetails(e.target.value);
+            } else {
+                document.getElementById('monster-details').classList.add('hidden');
+                currentMonster = null;
+            }
+        });
+
+        document.getElementById('damage-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseInt(document.getElementById('damage-amount').value);
+            const type = document.getElementById('damage-type').value;
+            
+            if (isNaN(amount) || amount < 0) {
+                alert('Please enter a valid damage amount');
+                return;
+            }
+            
+            const result = calculateDamage(amount, type);
+            
+            document.getElementById('base-damage').textContent = result.base;
+            document.getElementById('result-type').textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            document.getElementById('modifier').textContent = result.modifier;
+            document.getElementById('final-damage').textContent = result.final;
+            
+            document.getElementById('results').classList.remove('hidden');
+        });
+
+        // Initialize
+        loadMonsters();
+    </script>
+</body>
+</html>
